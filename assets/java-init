@@ -1,11 +1,11 @@
 #!/bin/bash
-#set -x # this is for debugging purposes
+#set -x # debugging purposes
 
 # --- Configuration ---
 DEFAULT_GROUP_ID="com.example"
-DEFAULT_ARTIFACT_ID_PREFIX=""
+DEFAULT_ARTIFACT_ID_PREFIX="" # Keep this empty to use project_name directly as artifactId
 DEFAULT_VERSION="1.0-SNAPSHOT"
-DEFAULT_JAVA_VERSION="21"
+DEFAULT_JAVA_VERSION="21" # Or your preferred LTS version
 
 # --- Helper Functions for generating project files ---
 
@@ -24,12 +24,10 @@ create_ant_run_script() {
 echo "Building and running Ant project: $project_name..."
 
 # Execute the Ant 'run' target.
-# If you consistently face 'error: invalid target release: 21.0.7',
-# it means a system property is overriding your build.xml.
-# In that case, uncomment the line below and comment the one above,
-# ensuring your JDK is indeed Java 21.
-# ant -Djava.version=21 run
-
+# If you consistently face 'error: invalid target release:',
+# it means your 'javac' might be picking up a specific Java version string
+# that Ant's 'source'/'target' attributes don't like.
+# The build.xml now uses 'release', which should be more robust for Java 9+.
 ant run
 
 if [ \$? -ne 0 ]; then
@@ -61,8 +59,6 @@ This is a simple Java project built with Apache Ant.
     \`\`\`bash
     ./run.sh
     \`\`\`
-
-    *(If the \`./run.sh\` fails with 'invalid target release: 21.0.7', try editing \`run.sh\` and uncommenting the line with \`-Djava.version=21\`)*
 
 ## Ant Commands
 
@@ -179,8 +175,11 @@ create_maven_project() {
   echo "  Version: $version"
   echo "  Java Version: $java_version"
 
+  # Store the directory where the script was invoked (the parent of the new project)
   local original_invoke_dir=$(pwd)
 
+  # Use Maven Archetype to generate a simple Java project
+  # IMPORTANT: The archetype creates the project directory in DoutputDirectory.
   mvn archetype:generate \
     -DgroupId="$group_id" \
     -DartifactId="$artifact_id" \
@@ -193,6 +192,7 @@ create_maven_project() {
     -Dname="$project_name" \
     -DoutputDirectory="$original_invoke_dir" # Ensure project is created in original invoke dir
 
+  # Now, change into the newly created project directory robustly
   local project_root_dir="${original_invoke_dir}/${artifact_id}"
   echo "Attempting to change directory to: $project_root_dir"
   pushd "$project_root_dir" || {
@@ -201,6 +201,7 @@ create_maven_project() {
   }
   pwd # Debug: print current directory after pushd
 
+  # --- Define correct base paths for App.java and AppTest.java based on archetype behavior ---
   # The archetype puts App.java and AppTest.java directly under the groupId path
   local base_java_dir="src/main/java/$(echo "$group_id" | sed 's/\./\//g')"
   local base_test_dir="src/test/java/$(echo "$group_id" | sed 's/\./\//g')"
@@ -218,6 +219,8 @@ create_maven_project() {
   fi
   echo "-----------------------------------------------------"
 
+  # IMPORTANT: The archetype generates a JUnit 4 test.
+  # We delete the original and create a JUnit 5 one in the correct path.
   local original_test_path="${base_test_dir}/AppTest.java"
   if [ -f "$original_test_path" ]; then
     echo "Deleting original JUnit 4 test file: $original_test_path"
@@ -404,16 +407,16 @@ create_ant_project() {
   local group_id=$2    # Ant doesn't use groupId directly, but collected
   local artifact_id=$3 # Ant doesn't use artifactId directly
   local version=$4
-  local java_version=$5
+  local java_version=$5 # This will still be '21'
 
   echo "Building Ant project: '$project_name'..."
 
   # Ant projects typically create the root directory themselves
   mkdir -p "$project_name"
-  cd "$project_name" || {
+  pushd "$project_name" || {
     echo "Failed to enter project directory. Exiting."
     exit 1
-  }
+  } # Use pushd for consistency
 
   mkdir -p src/main/java
   mkdir -p src/test/java
@@ -434,7 +437,7 @@ EOF
     <description>
         Simple Ant build script for $project_name
     </description>
-    <property name="src.dir" location="src/main/java"/>
+    <property environment="env"/> <property name="src.dir" location="src/main/java"/>
     <property name="build.dir" location="build"/>
     <property name="dist.dir"  location="dist"/>
     <property name="main.class" value="App"/>
@@ -451,7 +454,8 @@ EOF
 
     <target name="compile" depends="init" description="compile the source ">
         <javac srcdir="\${src.dir}" destdir="\${build.dir}" includeantruntime="false"
-               source="\${java.version}" target="\${java.version}">
+               release="21" fork="true"
+               executable="\${env.JAVA_HOME}/bin/javac">
             <classpath refid="project.classpath"/>
         </javac>
     </target>
@@ -478,6 +482,8 @@ EOF
   # Create run.sh and README.md
   create_ant_run_script "$(pwd)" "$project_name"
   create_ant_readme "$(pwd)" "$project_name"
+
+  popd # Return to original directory
 
   echo -e "\nAnt project '$project_name' created successfully!"
   echo "Navigate to '$project_name'."
