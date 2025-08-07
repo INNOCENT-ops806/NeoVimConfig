@@ -5,6 +5,7 @@ require("config.lazy")
 --vim.cmd("colorscheme slate")
 --vim.cmd "colorscheme evening"
 --vim.cmd("colorscheme vim")
+--vim.cmd("colorscheme default")
 vim.cmd("colorscheme retrobox")
 --vim.cmd("colorscheme tokyonight")
 --vim.cmd("colorscheme peachpuff")

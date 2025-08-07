@@ -3,5 +3,5 @@ return {
   config = function()
     require("gitsigns").setup()
     vim.keymap.set("n", "<leader>gp", ":gitsigns preview_hunk<CR>", {})
-  end
+  end,
 }

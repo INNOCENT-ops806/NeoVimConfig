@@ -425,7 +425,10 @@ create_ant_project() {
   # Create a simple App.java
   cat <<EOF >src/main/java/App.java
 public class App {
-    public static void main(String[] args) {
+  /*
+  * @author INNOCENT-ops806
+  */  
+  public static void main(String[] args) {
         System.out.println("Hello from Ant project: $project_name!");
     }
 }
