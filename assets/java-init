@@ -5,7 +5,7 @@
 DEFAULT_GROUP_ID="com.example"
 DEFAULT_ARTIFACT_ID_PREFIX="" # Keep this empty to use project_name directly as artifactId
 DEFAULT_VERSION="1.0-SNAPSHOT"
-DEFAULT_JAVA_VERSION="21" # Or your preferred LTS version
+DEFAULT_JAVA_VERSION="25" # Or your preferred LTS version
 
 # --- Helper Functions for generating project files ---
 
@@ -426,7 +426,7 @@ create_ant_project() {
   cat <<EOF >src/main/java/App.java
 public class App {
   /*
-  * @author INNOCENT-ops806
+  * @author https://github.com/INNOCENT-ops806
   */  
   public static void main(String[] args) {
         System.out.println("Hello from Ant project: $project_name!");
@@ -494,6 +494,192 @@ EOF
   echo "Happy coding!"
 }
 
+create_gradle_project() {
+  local project_name="$1"
+  local group_id="$2"
+  local artifact_id="$3"
+  local java_version="$4"
+
+  # --- Argument Validation ---
+  if [ -z "$project_name" ] || [ -z "$group_id" ] || [ -z "$artifact_id" ] || [ -z "$java_version" ]; then
+    echo "Error: All arguments (project_name, group_id, artifact_id, java_version) are required."
+    echo "Usage: create_gradle_project \"Project Name\" \"com.example.package\" \"artifact-id\" \"25\""
+    return 1
+  fi
+
+  echo "🚀 Building Gradle project: '$project_name'..."
+  echo "  Group ID: $group_id"
+  echo "  Artifact ID: $artifact_id"
+  echo "  Java Version: $java_version"
+
+  local original_invoke_dir=$(pwd)
+  local project_root_dir="${original_invoke_dir}/${artifact_id}"
+  local app_sub_dir="app" # The subdirectory where the application's build.gradle will be
+
+  if [ -d "$project_root_dir" ]; then
+    echo "Error: Project directory '$project_root_dir' already exists. Aborting. ❌"
+    return 1
+  fi
+
+  echo "Creating project directory: '$project_root_dir'..."
+  mkdir -p "$project_root_dir" || {
+    echo "Error: Failed to create project directory '$project_root_dir'. ❌"
+    return 1
+  }
+  pushd "$project_root_dir" || {
+    echo "Error: Failed to enter project directory '$project_root_dir'. ❌"
+    return 1
+  }
+
+  echo "Running 'gradle init' to scaffold the project... (Piping inputs for non-interactive mode)"
+
+  (
+    echo "1"
+    echo "y"
+  ) | gradle init \
+    --type java-application \
+    --dsl groovy \
+    --test-framework junit-jupiter \
+    --package "$group_id" \
+    --project-name "$artifact_id" \
+    --java-version "$java_version"
+
+  if [ $? -ne 0 ]; then
+    echo "Error: 'gradle init' failed to generate the project. Cleaning up. ❌"
+    popd
+    rm -rf "$project_root_dir"
+    return 1
+  fi
+
+  echo "--- Files created by 'gradle init' in $(pwd): ---"
+  ls -F
+  echo "-------------------------------------"
+
+  # --- change into the 'app' subdirectory to modify its build.gradle ---
+  echo "Navigating to '$app_sub_dir' directory to customize 'build.gradle'..."
+  pushd "$app_sub_dir" || {
+    echo "Critical Error: '$app_sub_dir' subdirectory not found. This is unexpected. ❌"
+    popd # Pop from project_root_dir
+    rm -rf "$project_root_dir"
+    return 1
+  }
+
+  local BUILD_GRADLE="build.gradle"
+  local APP_JAVA_PATH="src/main/java/$(echo "$group_id" | sed 's/\./\//g')/App.java"
+  local APP_TEST_PATH="src/test/java/$(echo "$group_id" | sed 's/\./\//g')/AppTest.java" # This path is relative to app/
+
+  # --- Check for build.gradle AFTER init in the 'app' subdir ---
+  if [ ! -f "$BUILD_GRADLE" ]; then
+    echo "Critical Error: '$BUILD_GRADLE' not found in '$(pwd)' after successful 'gradle init'. This is unexpected. ❌"
+    popd # Pop from app/
+    popd # Pop from project_root_dir
+    rm -rf "$project_root_dir"
+    return 1
+  fi
+
+  echo "Customizing 'build.gradle' for Mockito and application plugin configuration... 🛠️"
+  # --- Modify build.gradle ---
+  if [ -f "$BUILD_GRADLE" ]; then
+    # 1. Add Mockito dependency (using latest stable Mockito 5.x)
+    sed -i "/testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine'/a\ \ \ \ testImplementation 'org.mockito:mockito-core:5.10.0'" "$BUILD_GRADLE"
+    echo "  - Added Mockito dependency."
+
+    #  Ensure application plugin is configured with mainClass
+    if grep -q "mainClass =" "$BUILD_GRADLE"; then
+      sed -i "s|mainClass = '.*'|mainClass = '${group_id}.App'|" "$BUILD_GRADLE"
+      echo "  - Updated 'mainClass' for application plugin."
+    else
+      sed -i "/^application {/a\ \ \ \ mainClass = '${group_id}.App'" "$BUILD_GRADLE"
+      echo "  - Added 'mainClass' for application plugin (fallback)."
+    fi
+
+    #  Ensure Java version is set in the toolchain block
+    if grep -q "languageVersion = JavaLanguageVersion.of([0-9]\+)" "$BUILD_GRADLE"; then
+      sed -i "s|languageVersion = JavaLanguageVersion.of([0-9]\+)|languageVersion = JavaLanguageVersion.of(${java_version})|" "$BUILD_GRADLE"
+      echo "  - Verified/updated Java toolchain language version."
+    else
+      sed -i "/^java {/a\ \ \ \ toolchain {\n\ \ \ \ \ \ \ \ languageVersion = JavaLanguageVersion.of(${java_version})\n\ \ \ \ }" "$BUILD_GRADLE"
+      echo "  - Added Java toolchain configuration (fallback)."
+    fi
+
+  else
+    echo "Error: 'build.gradle' not found after project generation in app/ directory. This is unexpected. ❌"
+    popd # Pop from app/
+    popd # Pop from project_root_dir
+    rm -rf "$project_root_dir"
+    return 1
+  fi
+
+  # --- Pop back to the main project root directory ---
+  popd # Back to $project_root_dir
+
+  # --- Generate a run.sh script for convenience ---
+  echo "Creating 'run.sh' script... 📜"
+  cat <<EOF >run.sh
+#!/bin/bash
+# Builds and runs the Gradle application.
+echo "Building and running $project_name..."
+./gradlew build && ./gradlew :app:run
+EOF
+  chmod +x run.sh
+
+  # --- Generate a README.md file ---
+  echo "Creating 'README.md'... 📄"
+  local group_id_path=$(echo "$group_id" | sed 's/\./\//g')
+  cat <<EOF >README.md
+# $project_name
+
+This is a simple Java application built with Gradle.
+
+## Project Structure
+\`\`\`
+.
+├── gradle/
+├── app/
+│   ├── build.gradle
+│   └── src/
+│       ├── main/
+│       │   └── java/
+│       │       └── ${group_id_path}/
+│       │           └── App.java
+│       └── test/
+│           └── java/
+│               └── ${group_id_path}/
+│                   └── AppTest.java
+├── settings.gradle
+├── gradlew
+├── gradlew.bat
+├── README.md
+└── run.sh
+\`\`\`
+
+## Build and Run
+
+To build and run the application from the project root:
+\`\`\`bash
+./run.sh
+\`\`\`
+
+## Testing
+
+To run the tests:
+\`\`\`bash
+./gradlew test
+\`\`\`
+
+EOF
+
+  # --- Return to the original directory where the script was invoked ---
+  popd # Back to original_invoke_dir
+
+  echo -e "\n🎉 Gradle project '$project_name' created successfully at '$project_root_dir'!"
+  echo "To get started:"
+  echo "  cd '$project_root_dir'"
+  echo "  ./run.sh"
+  echo "Happy coding! 💻"
+  return 0
+}
+
 # --- Main Script Logic ---
 
 if [ -z "$1" ]; then
@@ -514,7 +700,8 @@ echo ""
 echo "Choose a build system:"
 echo "  1. Maven"
 echo "  2. Ant"
-echo "Enter choice (1 or 2):"
+echo "  3. Gradle"
+echo "Enter choice (1 or 2 or 3):"
 
 read -r CHOICE
 
@@ -524,6 +711,9 @@ case $CHOICE in
   ;;
 2)
   create_ant_project "$PROJECT_NAME" "$DEFAULT_GROUP_ID" "$ARTIFACT_ID" "$DEFAULT_VERSION" "$DEFAULT_JAVA_VERSION"
+  ;;
+3)
+  create_gradle_project "$PROJECT_NAME" "$DEFAULT_GROUP_ID" "$ARTIFACT_ID" "$DEFAULT_JAVA_VERSION"
   ;;
 *)
   echo "Invalid choice. Exiting."
