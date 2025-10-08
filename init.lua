@@ -8,9 +8,11 @@ require("config.lazy")
 --vim.cmd("colorscheme default")
 --vim.cmd("colorscheme retrobox")
 --vim.cmd("colorscheme tokyonight")
+--vim.cmd("colorscheme rose-pine")
+vim.cmd("colorscheme OceanicNext")
 --vim.cmd("colorscheme peachpuff")
-vim.cmd("colorscheme rose-pine")
 --vim.cmd([[colorscheme gruvbox]])
+
 vim.keymap.set("n", "<leader>todo", ":e ~/notes/todos.md<CR>", { desc = "Open Todo list" })
 vim.keymap.set("n", "<leader>s", ":nohlsearch<CR>", { desc = "Clear search highlights" })
 
