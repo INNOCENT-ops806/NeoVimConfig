@@ -12,6 +12,8 @@ require("config.lazy")
 vim.cmd("colorscheme OceanicNext")
 --vim.cmd("colorscheme peachpuff")
 --vim.cmd([[colorscheme gruvbox]])
+vim.cmd("set tabstop=2")
+vim.cmd("set shiftwidth=2")
 
 vim.keymap.set("n", "<leader>todo", ":e ~/notes/todos.md<CR>", { desc = "Open Todo list" })
 vim.keymap.set("n", "<leader>s", ":nohlsearch<CR>", { desc = "Clear search highlights" })
