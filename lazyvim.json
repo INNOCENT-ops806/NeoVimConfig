@@ -1,6 +1,5 @@
 {
   "extras": [
-    "lazyvim.plugins.extras.ai.codeium",
     "lazyvim.plugins.extras.coding.yanky",
     "lazyvim.plugins.extras.editor.harpoon2",
     "lazyvim.plugins.extras.editor.mini-files",
@@ -22,6 +21,7 @@
     "lazyvim.plugins.extras.lang.tailwind",
     "lazyvim.plugins.extras.ui.treesitter-context",
     "lazyvim.plugins.extras.util.chezmoi",
+    "lazyvim.plugins.extras.util.dot",
     "lazyvim.plugins.extras.util.gitui"
   ],
   "news": {
