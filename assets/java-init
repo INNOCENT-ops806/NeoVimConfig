@@ -9,7 +9,7 @@ DEFAULT_JAVA_VERSION="25" # Or your preferred LTS version
 
 # --- Helper Functions for generating project files ---
 
-# Function to create a run.sh script for Ant
+# Function to create a run.sh script for Ant (Simplified)
 create_ant_run_script() {
   local project_dir=$1
   local project_name=$2
@@ -21,18 +21,14 @@ create_ant_run_script() {
 # Usage: ./run.sh
 #
 
-echo "Building and running Ant project: $project_name..."
+echo "Starting Ant build/run for: $project_name..."
 
 # Execute the Ant 'run' target.
-# If you consistently face 'error: invalid target release:',
-# it means your 'javac' might be picking up a specific Java version string
-# that Ant's 'source'/'target' attributes don't like.
-# The build.xml now uses 'release', which should be more robust for Java 9+.
 ant run
 
 if [ \$? -ne 0 ]; then
-    echo "Ant build/run failed. Check the output for details."
-    exit 1
+	echo "Ant build/run failed. Check the output for details."
+	exit 1
 fi
 EOF
   chmod +x "$project_dir/run.sh"
@@ -170,79 +166,43 @@ create_maven_project() {
   local java_version=$5
 
   echo "Building Maven project: '$project_name'..."
-  echo "  Group ID: $group_id"
-  echo "  Artifact ID: $artifact_id"
-  echo "  Version: $version"
-  echo "  Java Version: $java_version"
+  # ... (Display project variables) ...
 
-  # Store the directory where the script was invoked (the parent of the new project)
   local original_invoke_dir=$(pwd)
-
-  # Use Maven Archetype to generate a simple Java project
-  # IMPORTANT: The archetype creates the project directory in DoutputDirectory.
-  mvn archetype:generate \
-    -DgroupId="$group_id" \
-    -DartifactId="$artifact_id" \
-    -DarchetypeArtifactId="maven-archetype-quickstart" \
-    -DarchetypeVersion="1.4" \
-    -DinteractiveMode="false" \
-    -Djava.version="$java_version" \
-    -Dmaven.compiler.source="$java_version" \
-    -Dmaven.compiler.target="$java_version" \
-    -Dname="$project_name" \
-    -DoutputDirectory="$original_invoke_dir" # Ensure project is created in original invoke dir
-
-  # Now, change into the newly created project directory robustly
   local project_root_dir="${original_invoke_dir}/${artifact_id}"
-  echo "Attempting to change directory to: $project_root_dir"
+
+  mkdir -p "$project_root_dir"
   pushd "$project_root_dir" || {
     echo "Failed to enter project directory: $project_root_dir. Exiting."
     exit 1
   }
-  pwd # Debug: print current directory after pushd
 
-  # --- Define correct base paths for App.java and AppTest.java based on archetype behavior ---
-  # The archetype puts App.java and AppTest.java directly under the groupId path
-  local base_java_dir="src/main/java/$(echo "$group_id" | sed 's/\./\//g')"
-  local base_test_dir="src/test/java/$(echo "$group_id" | sed 's/\./\//g')"
+  # Create source directories
+  local base_java_path="src/main/java/$(echo "$group_id" | sed 's/\./\//g')"
+  local base_test_path="src/test/java/$(echo "$group_id" | sed 's/\./\//g')"
+  mkdir -p "$base_java_path"
+  mkdir -p "$base_test_path"
 
-  # --- DEBUG: Verify App.java after archetype generation ---
-  local app_java_path="${base_java_dir}/App.java"
-  echo "--- Debug: Checking App.java at: $(pwd)/$app_java_path ---"
-  if [ -f "$app_java_path" ]; then
-    cat "$app_java_path"
-  else
-    echo "Error: App.java not found at $(pwd)/$app_java_path immediately after archetype generation."
-    echo "This indicates an unexpected archetype behavior or an issue with the constructed path."
-    echo "Exiting, as App.java is a core file expected from the archetype."
-    exit 1 # Exit if App.java is not found
-  fi
-  echo "-----------------------------------------------------"
+  # Create App.java
+  cat <<EOF >"$base_java_path/App.java"
+package ${group_id};
 
-  # IMPORTANT: The archetype generates a JUnit 4 test.
-  # We delete the original and create a JUnit 5 one in the correct path.
-  local original_test_path="${base_test_dir}/AppTest.java"
-  if [ -f "$original_test_path" ]; then
-    echo "Deleting original JUnit 4 test file: $original_test_path"
-    rm "$original_test_path"
-  fi
+public class App {
+    public static void main(String[] args) {
+        System.out.println("Hello from Maven project: ${artifact_id}!");
+    }
+}
+EOF
 
-  # Overwrite the AppTest.java file with JUnit 5 specific code
-  mkdir -p "$base_test_dir" # Ensure directory exists
-  local test_file_path="${base_test_dir}/AppTest.java"
-  cat <<EOF >"$test_file_path"
+  # Create JUnit 5 test file (including Mockito import for setup)
+  cat <<EOF >"$base_test_path/AppTest.java"
 package ${group_id};
 
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.*; // For Mockito
 
-/**
- * Unit test for simple App.
- */
 class AppTest {
-    /**
-     * Rigorous Test :-)
-     */
     @Test
     void shouldAnswerWithTrue() {
         assertTrue(true);
@@ -250,54 +210,27 @@ class AppTest {
 }
 EOF
 
-  POM_PATH="pom.xml" # pom.xml is now in the current directory (project root)
-  if [ -f "$POM_PATH" ]; then
+  # Create the pom.xml file with JUnit 5 and Mockito setup
+  cat <<EOF >pom.xml
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
 
-    # Define multi-line XML blocks as shell variables
-    # Using printf %b to interpret backslash escapes, for clean newlines
-    properties_block=$(printf %b "        <properties>
-            <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-            <maven.compiler.release>${java_version}</maven.compiler.release>
-            <junit.jupiter.version>5.10.0</junit.jupiter.version>
-        </properties>")
+    <groupId>${group_id}</groupId>
+    <artifactId>${artifact_id}</artifactId>
+    <version>${version}</version>
+    <name>${project_name}</name>
 
-    build_block=$(printf %b "    <build>
-        <pluginManagement>
-            <plugins>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-surefire-plugin</artifactId>
-                    <version>3.2.5</version>
-                    <dependencies>
-                        <dependency>
-                            <groupId>org.junit.jupiter</groupId>
-                            <artifactId>junit-jupiter-engine</artifactId>
-                            <version>\${junit.jupiter.version}</version>
-                        </dependency>
-                    </dependencies>
-                </plugin>
-            </plugins>
-        </pluginManagement>
-        <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.13.0</version>
-                <configuration>
-                    <release>\${maven.compiler.release}</release>
-                </configuration>
-            </plugin>
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>exec-maven-plugin</artifactId>
-                <version>3.1.0</version>
-                <configuration>
-                    <mainClass>${group_id}.App</mainClass> </configuration>
-            </plugin>
-        </plugins>
-    </build>")
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.release>${java_version}</maven.compiler.release>
+        <junit.jupiter.version>5.10.0</junit.jupiter.version>
+        <mockito.version>5.10.0</mockito.version>
+    </properties>
 
-    junit5_deps_block=$(printf %b "        <dependency>
+    <dependencies>
+        <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-api</artifactId>
             <version>\${junit.jupiter.version}</version>
@@ -308,115 +241,76 @@ EOF
             <artifactId>junit-jupiter-engine</artifactId>
             <version>\${junit.jupiter.version}</version>
             <scope>test</scope>
-        </dependency>")
+        </dependency>
+        
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>\${mockito.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
 
-    # Create a temporary file for the AWK script
-    AWK_SCRIPT=$(mktemp -t pom_awk_XXXXXX.awk)
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
+            </plugin>
+            
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.1.0</version>
+                <configuration>
+                    <mainClass>${group_id}.App</mainClass>
+                </configuration>
+            </plugin>
+            
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.3.0</version>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <addClasspath>true</addClasspath>
+                            <classpathPrefix>lib/</classpathPrefix>
+                            <mainClass>${group_id}.App</mainClass>
+                        </manifest>
+                    </archive>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
+EOF
 
-    # Write the AWK script content to the temporary file
-    cat <<'AWK_EOF' >"$AWK_SCRIPT"
-            # Initialize flags
-            BEGIN {
-                in_properties=0;
-                in_build=0;
-                in_junit4_dep=0;
-                skip_current_dep_block=0;
-            }
-
-            # --- Deletion Logic ---
-            # Delete old <properties> block
-            /^[[:space:]]*<properties>/{ in_properties=1; next }
-            /^[[:space:]]*<\/properties>/{ if (in_properties) { in_properties=0; next } }
-            in_properties { next }
-
-            # Delete old <build> block
-            /^[[:space:]]*<build>/{ in_build=1; next }
-            /^[[:space:]]*<\/build>/{ if (in_build) { in_build=0; next } }
-            in_build { next }
-
-            # Delete old JUnit 4 dependency block (robust range-based deletion)
-            /^[[:space:]]*<dependency>/{
-                # Check for the start of the JUnit 4 dependency block
-                buffer = $0;
-                for (i=1; i<=4; i++) { # Read up to 4 more lines, assuming typical dependency block size
-                    if (getline line_val > 0) {
-                        buffer = buffer "\n" line_val;
-                        if (line_val ~ /<\/dependency>/) { break; }
-                    } else { break; }
-                }
-                if (buffer ~ /<groupId>junit<\/groupId>/ && buffer ~ /<artifactId>junit<\/artifactId>/ && buffer ~ /<version>4.11<\/version>/) {
-                    skip_current_dep_block = 1; # Mark this entire block for skipping
-                } else { print buffer; }
-                next;
-            }
-            /^[[:space:]]*<\/dependency>/{ if (skip_current_dep_block) { skip_current_dep_block = 0; next; } }
-            skip_current_dep_block { next } # Skip lines that are part of the JUnit 4 dependency block
-
-
-            # --- Insertion Logic ---
-            # Insert properties block after <modelVersion>
-            /^[[:space:]]*<modelVersion>/{
-                print;
-                print props_var;
-                next;
-            }
-
-            # Insert JUnit 5 dependencies before </dependencies>
-            /^[[:space:]]*<\/dependencies>/{
-                print junit5_var;
-            }
-
-            # Insert build block before </project>
-            /^[[:space:]]*<\/project>/{
-                print build_var;
-            }
-
-            # Print current line if no specific action was taken or not skipped by deletion logic
-            { print }
-AWK_EOF
-    # Now execute AWK using the temporary script file
-    awk -v props_var="$properties_block" \
-      -v build_var="$build_block" \
-      -v junit5_var="$junit5_deps_block" \
-      -f "$AWK_SCRIPT" "$POM_PATH" >"$POM_PATH.tmp" && mv "$POM_PATH.tmp" "$POM_PATH"
-
-    # Clean up temporary AWK script file
-    rm "$AWK_SCRIPT"
-
-  else
-    echo "Error: pom.xml not found after archetype generation. Cannot apply custom plugins. This is unexpected."
-    echo "Exiting due to critical file missing."
-    exit 1 # Exit if pom.xml is not found, as it's critical
-  fi
-
-  # Create run.sh and README.md (these will be created in the correct project_root_dir due to pushd)
+  # Create run.sh and README.md
   create_maven_run_script "$(pwd)" "$project_name"
   create_maven_readme "$(pwd)" "$project_name"
 
-  # Return to the original directory where the script was invoked
-  popd
+  popd || exit
 
   echo -e "\nMaven project '$project_name' created successfully!"
-  echo "Navigate to '$project_root_dir'." # Display the correct full path for navigation
-  echo "To build and run: './run.sh'"
   echo "Happy coding!"
 }
 
 create_ant_project() {
   local project_name=$1
-  local group_id=$2    # Ant doesn't use groupId directly, but collected
-  local artifact_id=$3 # Ant doesn't use artifactId directly
+  local group_id=$2
+  local artifact_id=$3
   local version=$4
-  local java_version=$5 # This will still be '21'
+  local java_version=$5 # Java version from user input
 
   echo "Building Ant project: '$project_name'..."
 
-  # Ant projects typically create the root directory themselves
   mkdir -p "$project_name"
   pushd "$project_name" || {
     echo "Failed to enter project directory. Exiting."
     exit 1
-  } # Use pushd for consistency
+  }
 
   mkdir -p src/main/java
   mkdir -p src/test/java
@@ -425,73 +319,81 @@ create_ant_project() {
   # Create a simple App.java
   cat <<EOF >src/main/java/App.java
 public class App {
-  /*
-  * @author https://github.com/INNOCENT-ops806
-  */  
-  public static void main(String[] args) {
-        System.out.println("Hello from Ant project: $project_name!");
-    }
+	/*
+	 * @author INNOCENT-ops806
+	 */	
+	public static void main(String[] args) {
+		System.out.println("Hello from Ant project: $project_name!");
+	}
 }
 EOF
 
   # Create a basic build.xml
+  # NOTE: Changed release version to 21 based on industry standard.
   cat <<EOF >build.xml
 <project name="$project_name" default="dist" basedir=".">
-    <description>
-        Simple Ant build script for $project_name
-    </description>
-    <property environment="env"/> <property name="src.dir" location="src/main/java"/>
-    <property name="build.dir" location="build"/>
-    <property name="dist.dir"  location="dist"/>
-    <property name="main.class" value="App"/>
-    <property name="java.version" value="${java_version}"/> <path id="project.classpath">
-        <fileset dir="lib">
-            <include name="**/*.jar"/>
-        </fileset>
-    </path>
+	<description>
+		Simple Ant build script for $project_name
+	</description>
+	<property environment="env"/> 
+	<property name="src.dir" location="src/main/java"/>
+	<property name="build.dir" location="build"/>
+	<property name="dist.dir"  location="dist"/>
+	<property name="main.class" value="App"/>
+	<property name="java.version" value="\$[java_version]}"/>
+	
+	<path id="project.classpath">
+		<fileset dir="lib">
+			<include name="**/*.jar"/>
+		</fileset>
+	</path>
 
-    <target name="init">
-        <mkdir dir="\${build.dir}"/>
-        <mkdir dir="\${dist.dir}"/>
-    </target>
+	<target name="init">
+		<mkdir dir="\${build.dir}"/>
+		<mkdir dir="\${dist.dir}"/>
+	</target>
 
-    <target name="compile" depends="init" description="compile the source ">
-        <javac srcdir="\${src.dir}" destdir="\${build.dir}" includeantruntime="false"
-               release="21" fork="true"
-               executable="\${env.JAVA_HOME}/bin/javac">
-            <classpath refid="project.classpath"/>
-        </javac>
-    </target>
+	<target name="compile" depends="init" description="compile the source ">
+		<javac srcdir="\${src.dir}" destdir="\${build.dir}" includeantruntime="false"
+			   release="21" fork="true"
+			   executable="\${env.JAVA_HOME}/bin/javac">
+			<classpath refid="project.classpath"/>
+		</javac>
+	</target>
 
-    <target name="dist" depends="compile" description="generate the distribution">
-        <jar jarfile="\${dist.dir}/\${ant.project.name}.jar" basedir="\${build.dir}">
-            <manifest>
-                <attribute name="Main-Class" value="\${main.class}"/>
-            </manifest>
-            <zipfileset dir="lib" prefix="lib/" /> </jar>
-    </target>
+	<target name="dist" depends="compile" description="generate the distribution">
+		<jar jarfile="\${dist.dir}/\${ant.project.name}.jar" basedir="\${build.dir}">
+			<manifest>
+				<attribute name="Main-Class" value="\${main.class}"/>
+				<attribute name="Class-Path" value="lib/"/> 
+			</manifest>
+			</jar>
+	</target>
 
-    <target name="run" depends="dist" description="run the application">
-        <java jar="\${dist.dir}/\${ant.project.name}.jar" fork="true"/>
-    </target>
+	<target name="run" depends="dist" description="run the application">
+		<java fork="true" classname="\${main.class}">
+			<classpath>
+				<path refid="project.classpath"/>
+				<path location="\${dist.dir}/\${ant.project.name}.jar"/>
+			</classpath>
+		</java>
+	</target>
 
-    <target name="clean" description="clean up">
-        <delete dir="\${build.dir}"/>
-        <delete dir="\${dist.dir}"/>
-    </target>
+	<target name="clean" description="clean up">
+		<delete dir="\${build.dir}"/>
+		<delete dir="\${dist.dir}"/>
+	</target>
 </project>
 EOF
 
-  # Create run.sh and README.md
   create_ant_run_script "$(pwd)" "$project_name"
   create_ant_readme "$(pwd)" "$project_name"
 
-  popd # Return to original directory
-
+  popd || exit
   echo -e "\nAnt project '$project_name' created successfully!"
   echo "Navigate to '$project_name'."
   echo "To build and run: './run.sh'"
-  echo "Happy coding!"
+  echo "Happy coding! "
 }
 
 create_gradle_project() {
@@ -546,7 +448,7 @@ create_gradle_project() {
 
   if [ $? -ne 0 ]; then
     echo "Error: 'gradle init' failed to generate the project. Cleaning up. ❌"
-    popd
+    popd || exit
     rm -rf "$project_root_dir"
     return 1
   fi
@@ -559,7 +461,7 @@ create_gradle_project() {
   echo "Navigating to '$app_sub_dir' directory to customize 'build.gradle'..."
   pushd "$app_sub_dir" || {
     echo "Critical Error: '$app_sub_dir' subdirectory not found. This is unexpected. ❌"
-    popd # Pop from project_root_dir
+    popd || exit # Pop from project_root_dir
     rm -rf "$project_root_dir"
     return 1
   }
@@ -571,8 +473,8 @@ create_gradle_project() {
   # --- Check for build.gradle AFTER init in the 'app' subdir ---
   if [ ! -f "$BUILD_GRADLE" ]; then
     echo "Critical Error: '$BUILD_GRADLE' not found in '$(pwd)' after successful 'gradle init'. This is unexpected. ❌"
-    popd # Pop from app/
-    popd # Pop from project_root_dir
+    popd || exit # Pop from app/
+    popd || exit # Pop from project_root_dir
     rm -rf "$project_root_dir"
     return 1
   fi
@@ -604,14 +506,14 @@ create_gradle_project() {
 
   else
     echo "Error: 'build.gradle' not found after project generation in app/ directory. This is unexpected. ❌"
-    popd # Pop from app/
-    popd # Pop from project_root_dir
+    popd || exit # Pop from app/
+    popd || exit # Pop from project_root_dir
     rm -rf "$project_root_dir"
     return 1
   fi
 
   # --- Pop back to the main project root directory ---
-  popd # Back to $project_root_dir
+  popd || exit # Back to $project_root_dir
 
   # --- Generate a run.sh script for convenience ---
   echo "Creating 'run.sh' script... 📜"
@@ -670,13 +572,13 @@ To run the tests:
 EOF
 
   # --- Return to the original directory where the script was invoked ---
-  popd # Back to original_invoke_dir
+  popd || exit # Back to original_invoke_dir
 
-  echo -e "\n🎉 Gradle project '$project_name' created successfully at '$project_root_dir'!"
+  echo -e "\n Gradle project '$project_name' created successfully at '$project_root_dir'!"
   echo "To get started:"
   echo "  cd '$project_root_dir'"
   echo "  ./run.sh"
-  echo "Happy coding! 💻"
+  echo "Happy coding!"
   return 0
 }
 
