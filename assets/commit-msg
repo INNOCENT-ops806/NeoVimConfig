@@ -1,0 +1,22 @@
+#!/bin/zsh
+# You can edit the above to suit the current shell that you are using, I for one am using zsh
+
+#This is a script used to add a commit-msg script in the git hooks dir
+
+cat <<EOF >".git/hooks/commit-msg"
+#!/bin/bash 
+COMMIT_MSG_FILE=\$1 # The path to the temporary file containing the commit message
+FIRST_LINE=\$(head -n1 "\$COMMIT_MSG_FILE")
+VALID_TYPES="feat|fix|chore|docs|style|refactor|test|build|ci"
+if ! echo "$FIRST_LINE" | grep -Eq "^($VALID_TYPES): "; then
+  echo "ERROR: Invalid commit message format."
+  echo "       Commit message must follow Conventional Commits guidelines."
+  echo "       Example: 'feat: Add new splash screen'"
+  echo "       Valid types: feat, fix, chore, docs, style, refactor, test, build, ci"
+  echo "       See https://www.conventionalcommits.org/ for more details."
+  exit 1 # Exit with error code, which prevents the commit
+fi
+exit 0 # Exit with success code, allowing the commit
+
+EOF
+chmod +x ".git/hooks/commit-msg"
