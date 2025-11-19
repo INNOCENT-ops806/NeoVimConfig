@@ -20,3 +20,4 @@ exit 0 # Exit with success code, allowing the commit
 
 EOF
 chmod +x ".git/hooks/commit-msg"
+echo "commit-msg file create at $(pwd)/.git/hooks/"
