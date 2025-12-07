@@ -8,7 +8,7 @@ cat <<EOF >".git/hooks/commit-msg"
 COMMIT_MSG_FILE=\$1 # The path to the temporary file containing the commit message
 FIRST_LINE=\$(head -n1 "\$COMMIT_MSG_FILE")
 VALID_TYPES="feat|fix|chore|docs|style|refactor|test|build|ci"
-if ! echo "$FIRST_LINE" | grep -Eq "^($VALID_TYPES): "; then
+if ! echo "\$FIRST_LINE" | grep -Eq "^(\$VALID_TYPES): "; then
   echo "ERROR: Invalid commit message format."
   echo "       Commit message must follow Conventional Commits guidelines."
   echo "       Example: 'feat: Add new splash screen'"
